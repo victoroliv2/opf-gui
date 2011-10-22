@@ -29,11 +29,30 @@ import math
 import pygwt
 import random
 
+from pyjamas.HTTPRequest import HTTPRequest
+from pyjamas.JSONService import JSONProxy
+import urllib
+
+
+try:
+    # included in python 2.6...
+    from json import dumps, loads
+except ImportError:
+    try:
+        # recommended library (python 2.5)
+        from simplejson import dumps, loads
+    except ImportError:
+        # who's the pyjs daddy?
+        from pyjamas.JSONParser import JSONParser
+        parser = JSONParser()
+        dumps = getattr(parser, 'encode')
+        loads = getattr(parser, 'decodeAsObject')
+        JSONDecodeException = None
+
 FPS = 30
 
 class Point():
     def __init__(self, x, y, c):
-        print "new point", x, y
         self.x = x
         self.y = y
         self.c = c
@@ -43,6 +62,8 @@ class Canvas(GWTCanvas):
     def __init__(self, w, h):
         self.w = w
         self.h = h
+        self.classify = False
+        self.color = [(random.randint(0,256), random.randint(0,256), random.randint(0,256)),]
         self.PointList = []
         GWTCanvas.__init__(self, self.w, self.h)
         
@@ -53,13 +74,17 @@ class Canvas(GWTCanvas):
         self.resize(self.w, self.h)
         
     def clear(self):
+      self.color = [(random.randint(0,256), random.randint(0,256), random.randint(0,256)),]
       self.PointList = []
 
     def onMouseDown(self, sender, x, y):
       rx = x + Window.getScrollLeft()
       ry = y + Window.getScrollTop()
-      self.PointList.append( Point(rx, ry, 0) )
-      
+      if self.classify:
+        self.PointList.append( Point(rx, ry, -1 ) )
+      else:
+        self.PointList.append( Point(rx, ry, len(self.color)-1) )
+        
     def onTimer(self, t=None):
         Timer(int(1000/FPS), self)
         
@@ -70,47 +95,85 @@ class Canvas(GWTCanvas):
         self.setFillStyle(Color.Color('#CCC'))
         self.fillRect(0,0,self.w,self.h)
         
-        self.setFillStyle(Color.Color('#000'))
         for p in self.PointList:
+          if p.c >= 0:
+            cl = self.color[p.c]
+            self.setFillStyle(Color.Color(cl[0], cl[1], cl[2]))
+            self.beginPath()
+            self.arc(p.x, p.y, 5, 0, 3.1416*2, True)
+            self.closePath()
+            self.fill()
+            self.stroke()
+          else:
             self.beginPath()
             self.arc(p.x, p.y, 5, 0, 3.1416*2, True)
             self.closePath()
             self.stroke()
-
+            
 class RunHandle:
+  def __init__ (self, canvas):
+    self.canvas = canvas
+
+  def onCompletion(self, response):
+    if response:
+      self.canvas.PointList = [Point(x,y,c) for x,y,c in loads (response)]
+    else:
+      print "EMPTY ANSWER"
+
   def onClick(self, sender):
-    pass
+    msg = dumps( [(p.x,p.y,p.c) for p in self.canvas.PointList] )
+    HTTPRequest().asyncPost(url = "http://0.0.0.0:8080/",
+                            postData = msg,
+                            handler = self)
+    print "REQUEST", msg
 
 class ChangeLabelHandle:
+  def __init__ (self, canvas):
+    self.canvas = canvas
+
   def onClick(self, sender):
-    pass
+    self.canvas.classify = False
+    self.canvas.color.append((random.randint(0,256), random.randint(0,256), random.randint(0,256)))
+
+class ClassifyHandle:
+  def __init__ (self, canvas):
+    self.canvas = canvas
+
+  def onClick(self, sender):
+    self.canvas.classify = True
 
 class ClearHandle:
+  def __init__ (self, canvas):
+    self.canvas = canvas
+
   def onClick(self, sender):
-    pass
+    self.canvas.clear()
 
 class OPF_GUI(Composite):
   def __init__(self):
     Composite.__init__(self)
 
-    vp = VerticalPanel()
+    vp = VerticalPanel(Spacing=10)
     
     self.canvas = Canvas(800, 600)
     
-    handle_run   = RunHandle()
-    handle_cg    = ChangeLabelHandle()
-    handle_clear = ClearHandle()
+    handle_run      = RunHandle(self.canvas)
+    handle_cg       = ChangeLabelHandle(self.canvas)
+    handle_classify = ClassifyHandle(self.canvas)
+    handle_clear    = ClearHandle(self.canvas)
     
-    self.run    = Button("Run!",         handle_run,   StyleName='button')
-    self.change = Button("Change label", handle_cg,    StyleName='button')
-    self.clear  = Button("Clear",        handle_clear, StyleName='button')
+    self.run      = Button("Run!",         handle_run,      StyleName='button')
+    self.change   = Button("Change label", handle_cg,       StyleName='button')
+    self.classify = Button("Classify",     handle_classify, StyleName='button')
+    self.clear    = Button("Clear",        handle_clear,    StyleName='button')
     
-    hp = HorizontalPanel()
+    hp = HorizontalPanel(Spacing=10)
     hp.add(self.run)
     hp.add(self.change)
+    hp.add(self.classify)
     hp.add(self.clear)
     
-    vp.add(Label("Optimum-Path Forest Classifier", StyleName='label'))
+    vp.add(Label("Optimum-Path Forest Classifier Demo", StyleName='label'))
     vp.add(self.canvas)
     vp.add(hp)
 
