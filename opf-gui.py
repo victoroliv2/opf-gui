@@ -100,11 +100,15 @@ class Canvas(GWTCanvas):
             cl = self.color[p.c]
             self.setFillStyle(Color.Color(cl[0], cl[1], cl[2]))
             self.beginPath()
-            self.arc(p.x, p.y, 5, 0, 3.1416*2, True)
+            self.arc(p.x, p.y, 8, 0, 3.1416*2, True)
             self.closePath()
             self.fill()
             self.stroke()
           else:
+            self.beginPath()
+            self.arc(p.x, p.y, 8, 0, 3.1416*2, True)
+            self.closePath()
+            self.stroke()
             self.beginPath()
             self.arc(p.x, p.y, 5, 0, 3.1416*2, True)
             self.closePath()
@@ -122,7 +126,7 @@ class RunHandle:
 
   def onClick(self, sender):
     msg = dumps( [(p.x,p.y,p.c) for p in self.canvas.PointList] )
-    HTTPRequest().asyncPost(url = "http://0.0.0.0:8080/",
+    HTTPRequest().asyncPost(url = "http://parati.dca.fee.unicamp.br/opfdemo",
                             postData = msg,
                             handler = self)
     print "REQUEST", msg
